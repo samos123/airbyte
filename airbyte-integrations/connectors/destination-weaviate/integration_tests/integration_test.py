@@ -517,6 +517,33 @@ def test_missing_fields(config: Mapping, client: Client):
     assert actual["properties"].get("arr") is None
 
 
+def test_number_with_initial_null_values(config: Mapping, client: Client):
+    stream_name = "article"
+    stream_schema = {"type": "object", "properties": {
+        "title": {"type": "string"},
+        "number": {"type": ["null", "number"]}
+    }}
+    catalog = create_catalog(stream_name, stream_schema)
+    first_state_message = _state({"state": "1"})
+    data = {"title": "test-initial-None", "number": None}
+    with_number = data.copy()
+    with_number["number"] = 1
+    first_record_chunk = [_record(stream_name, data), _record(stream_name, with_number)]
+
+    destination = DestinationWeaviate()
+
+    expected_states = [first_state_message]
+    output_states = list(
+        destination.write(
+            config, catalog, [*first_record_chunk, first_state_message]
+        )
+    )
+    assert expected_states == output_states, "Checkpoint state messages were expected from the destination"
+
+    class_name = stream_to_class_name(stream_name)
+    assert count_objects(client, class_name) == 2, "There should be 2 objects in Weaviate"
+
+
 def test_record_additional_properties(config: Mapping, client: Client):
     stream_name = "article"
     stream_schema = {
